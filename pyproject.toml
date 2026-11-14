@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "triagem-n1-agentes"
+version = "0.1.0"
+description = "Estrutura inicial do sistema multiagente de triagem N1 do Hackathon UNIFEI 2026."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "mcp>=1.30,<2",
+    "pydantic>=2.11,<3",
+    "pydantic-settings>=2.10,<3",
+    "structlog>=25.4,<26",
+]
+
+[project.scripts]
+testar-conexao-mcp = "triagem_n1_agentes.conexao_mcp:main"
+listar-bases-mcp = "triagem_n1_agentes.bases_mcp:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.4,<9",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/triagem_n1_agentes"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"
+
