@@ -177,3 +177,21 @@ class ResultadoExecucaoEvento(BaseModel):
     estado: EstadoOrquestracao
     erro: str | None = None
 
+class RevisaoTriagem(BaseModel):
+    """Revisão da decisão proposta pelo Triador, sem executar ações."""
+
+    evento_id: str = Field(min_length=1)
+
+    aprovado: bool
+
+    exige_humano: bool = False
+
+    problemas: list[str] = Field(default_factory=list)
+
+    criticidade_confirmada: Criticidade
+
+    acao_confirmada: AcaoProposta | None = None
+
+    justificativa: str = Field(min_length=1)
+
+    confianca: float = Field(ge=0, le=1)

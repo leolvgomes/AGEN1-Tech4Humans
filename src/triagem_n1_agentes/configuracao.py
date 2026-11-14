@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, HttpUrl
+from pydantic import Field, HttpUrl, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +19,9 @@ class Configuracao(BaseSettings):
     mcp_url: HttpUrl = Field(default="http://localhost:8765/mcp")
     banco_caminho: Path = Field(default=Path("data/triagem.db"))
     nivel_log: str = Field(default="INFO")
+    ai_api_key: SecretStr | None = Field(default=None, validation_alias="AI_API_KEY")
+    ai_base_url: HttpUrl | None = Field(default=None, validation_alias="AI_BASE_URL")
+    ai_model: str | None = Field(default=None, validation_alias="AI_MODEL")
 
 
 @lru_cache
