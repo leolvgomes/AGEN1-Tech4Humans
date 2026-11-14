@@ -132,6 +132,7 @@ class DecisaoTriagem(BaseModel):
     faq_utilizada: str | None = None
     campos_encontrados: list[str]
     campos_ausentes: list[str]
+    campos_extraidos: dict[str, Any] = Field(default_factory=dict)
     possivel_duplicidade: bool
     risco_seguranca: NivelRiscoSeguranca
     dado_sensivel_presente: bool

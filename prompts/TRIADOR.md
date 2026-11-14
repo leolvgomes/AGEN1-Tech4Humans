@@ -50,6 +50,11 @@ pessoal sensível. Não reproduza dados sensíveis na justificativa.
 - Identifique a FAQ usada.
 - Não escreva uma política que não exista nas fontes.
 - Se faltar informação, proponha `SOLICITAR_INFORMACOES` e liste apenas o que falta.
+- Campos obrigatórios do catálogo só se aplicam quando `tipo_catalogo` não é
+  `null` e a ação proposta abre ou encaminha um chamado desse tipo.
+- Quando uma dúvida puder ser respondida diretamente pelo FAQ, use
+  `tipo_catalogo: null` e `campos_ausentes: []`. Não transforme uma dúvida de
+  procedimento em pedido de acesso, equipamento ou outro item do catálogo.
 
 ## Saída
 
@@ -64,6 +69,7 @@ Responda somente com JSON compatível com `DecisaoTriagem`:
   "faq_utilizada": "id ou null",
   "campos_encontrados": ["string"],
   "campos_ausentes": ["string"],
+  "campos_extraidos": {"nome_do_campo": "valor extraído do evento"},
   "possivel_duplicidade": false,
   "risco_seguranca": "nenhum | baixo | medio | alto | critico",
   "dado_sensivel_presente": false,

@@ -9,6 +9,9 @@ description = "Estrutura inicial do sistema multiagente de triagem N1 do Hackath
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "langchain>=1,<2",
+    "langchain-openai>=1,<2",
+    "langgraph>=1,<2",
     "mcp>=1.30,<2",
     "openai>=2.8,<3",
     "pydantic>=2.11,<3",
@@ -19,8 +22,11 @@ dependencies = [
 [project.scripts]
 testar-conexao-mcp = "triagem_n1_agentes.conexao_mcp:main"
 listar-bases-mcp = "triagem_n1_agentes.bases_mcp:main"
+classificar-emails = "triagem_n1_agentes.classificacao_mcp:main"
 testar-conexao-ia = "triagem_n1_agentes.cliente_ia:main"
 testar-triador-ia = "triagem_n1_agentes.agentes_ia:main"
+testar-grafo-langchain = "triagem_n1_agentes.grafo_langchain:main"
+processar-um-evento-mcp = "triagem_n1_agentes.fluxo_mcp:main"
 
 [project.optional-dependencies]
 dev = [

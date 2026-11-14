@@ -5,13 +5,17 @@ import json
 import sys
 from typing import Any
 
+import structlog
 from openai import APIConnectionError, APIStatusError, AsyncOpenAI
 from pydantic import ValidationError
 
 from triagem_n1_agentes.cliente_ia import criar_cliente
 from triagem_n1_agentes.configuracao import Configuracao, obter_configuracao
+from triagem_n1_agentes.logs import configurar_logs
 from triagem_n1_agentes.modelos import DecisaoTriagem
 from triagem_n1_agentes.prompts import carregar_prompt
+
+logger = structlog.get_logger(__name__)
 
 
 class ErroAgenteIA(Exception):
@@ -39,15 +43,17 @@ class TriadorIA:
         evento: dict[str, Any],
         contexto: dict[str, Any],
     ) -> DecisaoTriagem:
-        if not self.configuracao.ai_model:
-            raise ErroAgenteIA("AI_MODEL não está configurado.")
-
-        entrada = json.dumps(
-            {"evento": evento, "contexto_autorizado": contexto},
-            ensure_ascii=False,
-            default=str,
-        )
+        evento_id = str(evento.get("id", "desconhecido"))
+        logger.info("agent_call_started", agent="triador", event_id=evento_id)
         try:
+            if not self.configuracao.ai_model:
+                raise ErroAgenteIA("AI_MODEL não está configurado.")
+
+            entrada = json.dumps(
+                {"evento": evento, "contexto_autorizado": contexto},
+                ensure_ascii=False,
+                default=str,
+            )
             resposta = await self.cliente.chat.completions.create(
                 model=self.configuracao.ai_model,
                 messages=[
@@ -65,22 +71,57 @@ class TriadorIA:
                 max_tokens=1200,
             )
         except APIStatusError as erro:
+            logger.error(
+                "agent_call_failed",
+                agent="triador",
+                event_id=evento_id,
+                error_type=type(erro).__name__,
+            )
             raise ErroAgenteIA(
                 f"O gateway respondeu com HTTP {erro.status_code}."
             ) from erro
         except APIConnectionError as erro:
+            logger.error(
+                "agent_call_failed",
+                agent="triador",
+                event_id=evento_id,
+                error_type=type(erro).__name__,
+            )
             raise ErroAgenteIA("Falha de conexão com o gateway.") from erro
+        except Exception as erro:
+            logger.error(
+                "agent_call_failed",
+                agent="triador",
+                event_id=evento_id,
+                error_type=type(erro).__name__,
+            )
+            raise
 
-        conteudo = resposta.choices[0].message.content or ""
         try:
+            conteudo = resposta.choices[0].message.content or ""
             decisao = DecisaoTriagem.model_validate_json(conteudo)
         except ValidationError as erro:
+            logger.error(
+                "agent_call_failed",
+                agent="triador",
+                event_id=evento_id,
+                error_type=type(erro).__name__,
+            )
             raise ErroAgenteIA(
                 "O Triador não devolveu uma decisão no formato esperado."
             ) from erro
 
         # O evento original sempre prevalece sobre qualquer cópia devolvida pelo modelo.
-        return decisao.model_copy(update={"evento": evento})
+        decisao = decisao.model_copy(update={"evento": evento})
+        logger.info(
+            "agent_call_completed",
+            agent="triador",
+            event_id=evento_id,
+            categoria=decisao.categoria.value,
+            criticidade=decisao.criticidade.value,
+            acao_proposta=decisao.acao_proposta.value,
+        )
+        return decisao
 
 
 async def _demonstrar_triador() -> DecisaoTriagem:
@@ -114,6 +155,7 @@ async def _demonstrar_triador() -> DecisaoTriagem:
 
 def main() -> int:
     """Testa o Triador real com dados fictícios, sem consumir evento MCP."""
+    configurar_logs(obter_configuracao().nivel_log)
     try:
         decisao = asyncio.run(_demonstrar_triador())
     except ErroAgenteIA as erro:

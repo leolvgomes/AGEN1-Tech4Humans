@@ -81,6 +81,25 @@ resposta com modelos Pydantic e imprime o nome, a chave, os campos e as
 permissões de registro e atualização de cada base. Ele não consulta nem processa
 eventos.
 
+## Classificação de e-mails
+
+Para classificar os e-mails novos usando o Triador e o contexto autorizado do
+MCP, execute:
+
+```bash
+classificar-emails
+```
+
+O comando consulta a base `eventos` e classifica os registros com status `novo`;
+não usa `proximo_evento` nem `ler_evento`, e não responde nem altera registros.
+A decisão é impressa em JSON, sem o corpo do e-mail.
+
+As chamadas a ferramentas MCP e a agentes são registradas como logs JSON na
+saída padrão. Os registros identificam o agente (`triador`, `revisor` ou
+`executor`), o evento e o resultado, além da ferramenta MCP chamada. Não
+registram assunto, remetente ou corpo do e-mail. O nível de log é controlado
+por `TRIAGEM_NIVEL_LOG`.
+
 ## Teste de conexão com a IA
 
 Depois de preencher o `.env`, execute:
@@ -102,6 +121,36 @@ testar-triador-ia
 
 O teste usa um evento fictício de VPN, carrega `prompts/TRIADOR.md`, consulta a
 IA e valida a resposta com o modelo Pydantic `DecisaoTriagem`.
+
+## Fluxo LangChain/LangGraph
+
+O primeiro grafo seguro executa:
+
+```text
+Triador → Revisor → políticas determinísticas → humano/executor simulado
+```
+
+Para executar a demonstração fictícia:
+
+```bash
+.venv/bin/python -m triagem_n1_agentes.grafo_langchain
+```
+
+A demonstração não chama `proximo_evento` e não executa ferramentas de escrita
+do MCP. O nó Executor devolve apenas `EXECUCAO_SIMULADA`.
+
+## Processar um evento real sem escrita operacional
+
+Com o servidor MCP ativo, execute:
+
+```bash
+.venv/bin/python -m triagem_n1_agentes.fluxo_mcp
+```
+
+O comando busca um único evento, consulta contexto como `triador`, executa o
+LangGraph e registra as conversas de `triador`, `revisor` e, quando aprovado,
+`executor`. O Executor continua simulado: não responde ao evento nem cria ou
+altera chamados e incidentes.
 
 ## Modelo de decisão de triagem
 
