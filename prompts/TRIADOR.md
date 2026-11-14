@@ -28,6 +28,16 @@ Considere essas fontes como verdade. Não complete lacunas com conhecimento gera
 8. Identifique necessidade de aprovação humana.
 9. Proponha uma única ação e justifique com evidências.
 
+## Solicitação de férias
+
+- Para pedido de férias, proponha `registrar_ferias_legado` somente se os dados
+  estiverem explícitos no evento.
+- Extraia `colaborador`, `data_inicio` e `data_fim`; datas devem ser `AAAA-MM-DD`.
+- Não invente datas, colaborador, saldo ou aprovação do gestor.
+- Marque `necessita_aprovacao: true`. O Executor usará a interface legada somente
+  depois da aprovação humana.
+- Se faltar um desses dados, proponha `SOLICITAR_INFORMACOES`.
+
 ## Criticidade
 
 - `P0`: produto fora do ar para todos os clientes.
@@ -74,7 +84,7 @@ Responda somente com JSON compatível com `DecisaoTriagem`:
   "risco_seguranca": "nenhum | baixo | medio | alto | critico",
   "dado_sensivel_presente": false,
   "necessita_aprovacao": false,
-  "acao_proposta": "responder_faq | solicitar_informacoes | abrir_chamado | encaminhar_aprovacao | escalar_incidente | nao_agir | outra",
+  "acao_proposta": "responder_faq | solicitar_informacoes | abrir_chamado | encaminhar_aprovacao | escalar_incidente | registrar_ferias_legado | nao_agir | outra",
   "justificativa": "string",
   "confianca": 0.0
 }

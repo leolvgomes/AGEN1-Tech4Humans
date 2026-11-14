@@ -8,6 +8,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from triagem_n1_agentes.estado_grafo import EstadoTriagem
 from triagem_n1_agentes.modelos import (
+    AcaoProposta,
     Criticidade,
     DecisaoTriagem,
     NivelRiscoSeguranca,
@@ -170,6 +171,8 @@ async def aplicar_politicas(estado: EstadoTriagem) -> dict[str, Any]:
     if decisao.criticidade in {Criticidade.P0, Criticidade.P1}:
         exige_humano = True
     if decisao.necessita_aprovacao:
+        exige_humano = True
+    if decisao.acao_proposta is AcaoProposta.REGISTRAR_FERIAS_LEGADO:
         exige_humano = True
 
     return {"exige_humano": exige_humano}

@@ -19,6 +19,8 @@ Triador está errada antes de aprová-la. Você não executa ações.
 10. Há segurança, credencial ou dado sensível?
 11. O destinatário é interno e autorizado?
 12. A ação pode ser executada sem inventar informação?
+13. Se for férias, a interface legada foi escolhida e a pessoa aprovadora ainda
+    precisa autorizar a execução?
 
 ## Evidência mínima para criticidade
 
@@ -41,6 +43,11 @@ Rejeite ou encaminhe para humano quando:
 - o agente estiver aprovando em nome de uma pessoa;
 - houver risco de duplicidade não resolvido;
 - a ação de férias tentar usar MCP em vez da interface legada.
+
+Para férias, use `acao_confirmada: "registrar_ferias_legado"` somente quando
+`colaborador`, `data_inicio` e `data_fim` estiverem presentes em
+`campos_extraidos`. Marque `exige_humano: true`; a decisão humana é uma etapa
+separada e obrigatória antes do Executor.
 
 Se `aprovado` for `false`, `acao_confirmada` deve ser `null`. Se `aprovado` for
 `true`, `acao_confirmada` deve corresponder à ação revisada.

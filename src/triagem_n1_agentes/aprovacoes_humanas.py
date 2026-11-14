@@ -11,10 +11,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
+import structlog
 from pydantic import BaseModel
 
 from triagem_n1_agentes.banco import conectar
 from triagem_n1_agentes.configuracao import obter_configuracao
+
+logger = structlog.get_logger(__name__)
 
 
 class TarefaAprovacao(BaseModel):
@@ -251,6 +254,29 @@ async def _decidir_e_continuar(
             fila.finalizar_execucao(evento_id, sucesso=False)
             raise
         fila.finalizar_execucao(evento_id, sucesso=True)
+        retorno_execucao = resultado.get("retorno")
+        captura = (
+            retorno_execucao.get("captura")
+            if isinstance(retorno_execucao, dict)
+            else None
+        )
+        try:
+            await cliente.registrar_conversa(
+                agente="executor",
+                de="executor",
+                para="orquestrador",
+                mensagem=(
+                    f"Evento {evento_id}: computer use no legado retornou "
+                    f"status={resultado.get('status')}; "
+                    f"captura={captura or 'n/a'}"
+                ),
+            )
+        except Exception as erro:
+            logger.warning(
+                "legacy_executor_conversation_log_failed",
+                event_id=evento_id,
+                error_type=type(erro).__name__,
+            )
         return {"evento_id": evento_id, "status": "CONCLUIDA", "execucao": resultado}
 
 

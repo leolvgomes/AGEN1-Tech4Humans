@@ -16,6 +16,7 @@ dependencies = [
     "openai>=2.8,<3",
     "pydantic>=2.11,<3",
     "pydantic-settings>=2.10,<3",
+    "playwright>=1.61,<2",
     "structlog>=25.4,<26",
 ]
 
@@ -28,6 +29,7 @@ testar-triador-ia = "triagem_n1_agentes.agentes_ia:main"
 testar-grafo-langchain = "triagem_n1_agentes.grafo_langchain:main"
 processar-um-evento-mcp = "triagem_n1_agentes.fluxo_mcp:main"
 aprovacoes-mcp = "triagem_n1_agentes.aprovacoes_humanas:main"
+configurar-sessao-legado = "triagem_n1_agentes.computer_use_legado:main"
 
 [project.optional-dependencies]
 dev = [
