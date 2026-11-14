@@ -3,6 +3,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 
 from pydantic import SecretStr
+from structlog.testing import capture_logs
 
 from triagem_n1_agentes.agentes_ia import TriadorIA
 from triagem_n1_agentes.configuracao import Configuracao
@@ -41,9 +42,17 @@ def test_triador_valida_json_e_preserva_evento_original():
     cliente.chat.completions.create = AsyncMock(return_value=resposta)
     triador = TriadorIA(configuracao, cliente)
 
-    decisao = asyncio.run(triador.analisar(evento, {"faq": []}))
+    with capture_logs() as logs:
+        decisao = asyncio.run(triador.analisar(evento, {"faq": []}))
 
     assert decisao.evento == evento
     assert decisao.criticidade is Criticidade.P4
     assert decisao.acao_proposta is AcaoProposta.RESPONDER_FAQ
+    assert [log["event"] for log in logs] == [
+        "agent_call_started",
+        "agent_call_completed",
+    ]
+    assert all(log["agent"] == "triador" for log in logs)
+    assert all(log["event_id"] == "MAN-123" for log in logs)
+    assert "Como acesso?" not in str(logs)
 
