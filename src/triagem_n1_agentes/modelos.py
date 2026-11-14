@@ -53,6 +53,7 @@ class AcaoProposta(StrEnum):
     ABRIR_CHAMADO = "abrir_chamado"
     ENCAMINHAR_APROVACAO = "encaminhar_aprovacao"
     ESCALAR_INCIDENTE = "escalar_incidente"
+    REGISTRAR_FERIAS_LEGADO = "registrar_ferias_legado"
     NAO_AGIR = "nao_agir"
     OUTRA = "outra"
 

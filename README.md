@@ -18,6 +18,7 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
+python -m playwright install chromium
 ```
 
 Copie `.env.example` para `.env` e ajuste as variáveis conforme necessário.
@@ -28,6 +29,12 @@ Não armazene chaves ou credenciais no repositório.
 | Variável | Descrição | Padrão |
 | --- | --- | --- |
 | `TRIAGEM_MCP_URL` | URL do servidor MCP Streamable HTTP | `http://localhost:8765/mcp` |
+| `TRIAGEM_LEGADO_URL` | Tela inicial do sistema legado | `http://localhost:8765/legado` |
+| `TRIAGEM_LEGADO_ORIGENS_PERMITIDAS` | Origens que o navegador pode acessar | `http://localhost:8765` |
+| `TRIAGEM_LEGADO_MODELO` | Modelo com suporte ao computer tool na Responses API | `gpt-6.1-sol` |
+| `TRIAGEM_LEGADO_HEADLESS` | Executa Chromium sem janela visível | `true` |
+| `TRIAGEM_LEGADO_PERFIL` | Perfil local do navegador e sessão autenticada | `data/legado-browser` |
+| `TRIAGEM_LEGADO_CAPTURAS` | Capturas da interface legada | `data/legado-capturas` |
 | `TRIAGEM_BANCO_CAMINHO` | Caminho do arquivo SQLite local | `data/triagem.db` |
 | `TRIAGEM_NIVEL_LOG` | Nível mínimo dos logs | `INFO` |
 | `TRIAGEM_APROVADOR` | E-mail interno que recebe eventos escalados | não configurado |
@@ -184,6 +191,32 @@ registro de auditoria; a autenticação da pessoa ainda depende do controle de
 acesso ao terminal que executa o comando. Uma aprovação humana não libera uma
 ação que o Revisor tenha rejeitado ou deixado sem ação confirmada. O estado da
 tarefa impede uma segunda decisão ou execução após uma tentativa iniciada.
+
+## Computer use no sistema legado
+
+Pedidos de férias usam `registrar_ferias_legado`; não são gravados pelas bases
+MCP. O Executor só inicia o navegador depois da aprovação humana registrada para
+o mesmo evento. A automação usa a Responses API e um Chromium isolado, com
+requisições limitadas por padrão a `localhost:8765`.
+
+Antes do primeiro pedido, crie o perfil e autentique-se manualmente:
+
+```bash
+.venv/bin/python -m triagem_n1_agentes.computer_use_legado
+```
+
+Configure `AI_API_KEY`, `AI_BASE_URL` e `TRIAGEM_LEGADO_MODELO` com acesso a um
+modelo que aceite o tool `computer` na Responses API. Se o legado usar um domínio
+de autenticação separado, inclua a origem exata em
+`TRIAGEM_LEGADO_ORIGENS_PERMITIDAS`. O perfil com a sessão e as capturas ficam
+em `data/`, que não é versionado.
+
+Para visualizar o Chromium durante uma execução, configure
+`TRIAGEM_LEGADO_HEADLESS=false`. O agente recebe somente os campos extraídos e
+aprovados; se faltar dado obrigatório ou não houver confirmação visual, ele
+interrompe e retorna o caminho da captura para análise. HTTP 404, 401/403 e outros
+erros HTTP param o fluxo antes de enviar qualquer ação; confira a URL ou refaça a
+autenticação antes de tentar novamente.
 
 ## Modelo de decisão de triagem
 

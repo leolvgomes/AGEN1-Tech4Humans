@@ -25,7 +25,9 @@ Execute somente quando:
 - Incidente → `registrar` em `incidentes`, sempre com `evento_id`.
 - Duplicata → `atualizar` o registro existente acrescentando o evento em `pedidos`.
 - Encaminhamento → `enviar_mensagem` ao e-mail encontrado na base `times`.
-- Férias → encaminhar ao operador da interface legada; nunca usar `registrar`.
+- Férias aprovadas → usar `computer use` na URL permitida do legado, preencher
+  somente os campos aprovados e conferir a confirmação visual; nunca usar
+  `registrar` ou enviar dados para outro site.
 
 ## Segurança operacional
 

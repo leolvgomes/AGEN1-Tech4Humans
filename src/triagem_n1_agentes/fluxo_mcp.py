@@ -17,6 +17,7 @@ from triagem_n1_agentes.grafo_langchain import criar_grafo
 from triagem_n1_agentes.executor_mcp import executar_aprovado
 from triagem_n1_agentes.aprovacoes_humanas import FilaAprovacaoHumana
 from triagem_n1_agentes.logs import configurar_logs
+from triagem_n1_agentes.modelos import AcaoProposta
 
 logger = structlog.get_logger(__name__)
 
@@ -86,6 +87,13 @@ async def processar_um_evento() -> dict[str, Any]:
                 f"Ação proposta: {revisao.acao_confirmada or decisao.acao_proposta}.\n"
                 "Consulte o evento original no sistema de atendimento antes de decidir."
             )
+            if revisao.acao_confirmada is AcaoProposta.REGISTRAR_FERIAS_LEGADO:
+                mensagem += (
+                    "\nDados da solicitação: "
+                    f"colaborador={decisao.campos_extraidos.get('colaborador')}; "
+                    f"início={decisao.campos_extraidos.get('data_inicio')}; "
+                    f"fim={decisao.campos_extraidos.get('data_fim')}."
+                )
             try:
                 await cliente.registrar_conversa(
                     agente="orquestrador",
