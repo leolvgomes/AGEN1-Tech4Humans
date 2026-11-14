@@ -30,6 +30,9 @@ Não armazene chaves ou credenciais no repositório.
 | `TRIAGEM_MCP_URL` | URL do servidor MCP Streamable HTTP | `http://localhost:8765/mcp` |
 | `TRIAGEM_BANCO_CAMINHO` | Caminho do arquivo SQLite local | `data/triagem.db` |
 | `TRIAGEM_NIVEL_LOG` | Nível mínimo dos logs | `INFO` |
+| `AI_API_KEY` | Chave do gateway de IA | obrigatório para usar a IA |
+| `AI_BASE_URL` | Endereço compatível com a API OpenAI | obrigatório para usar a IA |
+| `AI_MODEL` | Modelo liberado pela organização | obrigatório para usar a IA |
 
 ## Estrutura
 
@@ -77,6 +80,28 @@ O comando chama somente `listar_bases`, com o agente `orquestrador`, valida a
 resposta com modelos Pydantic e imprime o nome, a chave, os campos e as
 permissões de registro e atualização de cada base. Ele não consulta nem processa
 eventos.
+
+## Teste de conexão com a IA
+
+Depois de preencher o `.env`, execute:
+
+```bash
+testar-conexao-ia
+```
+
+O diagnóstico faz uma solicitação mínima e informa somente se a conexão foi
+confirmada. A chave e a resposta bruta não são exibidas.
+
+## Teste do Triador inteligente
+
+Para validar o prompt e a saída estruturada sem consumir eventos do servidor:
+
+```bash
+testar-triador-ia
+```
+
+O teste usa um evento fictício de VPN, carrega `prompts/TRIADOR.md`, consulta a
+IA e valida a resposta com o modelo Pydantic `DecisaoTriagem`.
 
 ## Modelo de decisão de triagem
 
