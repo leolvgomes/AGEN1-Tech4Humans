@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, HttpUrl, SecretStr
+from pydantic import Field, HttpUrl, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,9 +19,21 @@ class Configuracao(BaseSettings):
     mcp_url: HttpUrl = Field(default="http://localhost:8765/mcp")
     banco_caminho: Path = Field(default=Path("data/triagem.db"))
     nivel_log: str = Field(default="INFO")
+    aprovador: str | None = Field(default=None)
     ai_api_key: SecretStr | None = Field(default=None, validation_alias="AI_API_KEY")
     ai_base_url: HttpUrl | None = Field(default=None, validation_alias="AI_BASE_URL")
     ai_model: str | None = Field(default=None, validation_alias="AI_MODEL")
+
+    @field_validator("aprovador")
+    @classmethod
+    def validar_aprovador(cls, valor: str | None) -> str | None:
+        """Aceita apenas o endereço interno usado para aprovações."""
+        if valor is None or not valor.strip():
+            return None
+        endereco = valor.strip()
+        if not endereco.lower().endswith("@t4h.exemplo"):
+            raise ValueError("TRIAGEM_APROVADOR deve usar o domínio @t4h.exemplo.")
+        return endereco
 
 
 @lru_cache

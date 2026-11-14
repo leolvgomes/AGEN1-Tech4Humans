@@ -38,8 +38,17 @@ _RISCO_SEGURANCA = re.compile(
     r"\b(phishing|golpe|vazamento|acesso\s+indevido|credencial)\b",
     re.IGNORECASE,
 )
+_DADO_PESSOAL_SENSIVEL = re.compile(
+    r"\b(atestado|laudo|diagn[oó]stico|exame(?:\s+m[eé]dico)?|cpf|"
+    r"dados?\s+de\s+sa[uú]de)\b",
+    re.IGNORECASE,
+)
 _CREDENCIAL_EXPLICITA = re.compile(
     r"\b(senha|password|token|api[_ -]?key)\s*[:=]\s*\S+",
+    re.IGNORECASE,
+)
+_SENHA_EXPIRANDO = re.compile(
+    r"\bsenha.{0,40}expir|\bexpir.{0,40}senha",
     re.IGNORECASE,
 )
 _CPF = re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b")
@@ -147,6 +156,7 @@ def _contem_dado_sensivel(evento: dict[str, Any]) -> bool:
     return bool(
         _DADO_SENSIVEL.search(texto)
         or _CREDENCIAL_EXPLICITA.search(texto)
+        or _SENHA_EXPIRANDO.search(texto)
         or _CPF.search(texto)
     )
 
@@ -165,6 +175,7 @@ def _sanitizar_valor(valor: Any) -> Any:
         if (
             _DADO_SENSIVEL.search(valor)
             or _CREDENCIAL_EXPLICITA.search(valor)
+            or _SENHA_EXPIRANDO.search(valor)
             or _CPF.search(valor)
         ):
             return "[CONTEUDO SENSIVEL REMOVIDO]"
@@ -211,7 +222,13 @@ def _decisao_revisao_humana(evento: dict[str, Any]) -> DecisaoTriagem:
         for chave in ("assunto", "corpo", "acoes")
     )
     risco_seguranca = bool(
-        _RISCO_SEGURANCA.search(texto) or _CREDENCIAL_EXPLICITA.search(texto)
+        _RISCO_SEGURANCA.search(texto)
+        or _CREDENCIAL_EXPLICITA.search(texto)
+        or _SENHA_EXPIRANDO.search(texto)
+    )
+    dado_pessoal_sensivel = bool(
+        _DADO_PESSOAL_SENSIVEL.search(texto)
+        or _CREDENCIAL_EXPLICITA.search(texto)
     )
     logger.info(
         "agent_call_skipped",
@@ -237,7 +254,7 @@ def _decisao_revisao_humana(evento: dict[str, Any]) -> DecisaoTriagem:
             if risco_seguranca
             else NivelRiscoSeguranca.NENHUM
         ),
-        dado_sensivel_presente=not risco_seguranca,
+        dado_sensivel_presente=dado_pessoal_sensivel,
         necessita_aprovacao=True,
         acao_proposta=(
             AcaoProposta.ESCALAR_INCIDENTE
@@ -248,11 +265,13 @@ def _decisao_revisao_humana(evento: dict[str, Any]) -> DecisaoTriagem:
             "O conteúdo pode conter dado pessoal sensível ou credencial; "
             "não foi enviado ao modelo e requer revisão humana."
         ),
-        confianca=1,
+        confianca=0.95,
     )
 
 
-async def classificar_emails_disponiveis() -> list[ResultadoClassificacao]:
+async def classificar_emails_disponiveis(
+    evento_ids: set[str] | None = None,
+) -> list[ResultadoClassificacao]:
     """Classifica eventos com status novo sem marcar, responder ou atualizar."""
     configuracao = obter_configuracao()
     endereco = str(configuracao.mcp_url)
@@ -266,6 +285,19 @@ async def classificar_emails_disponiveis() -> list[ResultadoClassificacao]:
                 for evento in eventos
                 if evento.get("status") == "novo" and evento.get("id")
             ]
+            if evento_ids is not None:
+                ids_disponiveis = {str(evento["id"]) for evento in novos}
+                ids_ausentes = evento_ids - ids_disponiveis
+                if ids_ausentes:
+                    raise ErroClassificacaoMCP(
+                        "Eventos solicitados não estão disponíveis com status novo: "
+                        + ", ".join(sorted(ids_ausentes))
+                    )
+                novos = [
+                    evento
+                    for evento in novos
+                    if str(evento["id"]) in evento_ids
+                ]
             contexto: dict[str, Any] = {}
             for base in ("faq", "catalogo", "times", "chamados", "incidentes"):
                 contexto[base] = await _consultar_base(sessao, base)
@@ -391,6 +423,8 @@ def main() -> int:
                     "tipo_catalogo": decisao.tipo_catalogo,
                     "criticidade": decisao.criticidade.value,
                     "risco_seguranca": decisao.risco_seguranca.value,
+                    "dado_sensivel_presente": decisao.dado_sensivel_presente,
+                    "necessita_aprovacao": decisao.necessita_aprovacao,
                     "acao_proposta": decisao.acao_proposta.value,
                     "campos_ausentes": decisao.campos_ausentes,
                     "justificativa": _sanitizar_valor(decisao.justificativa),

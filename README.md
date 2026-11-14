@@ -1,8 +1,8 @@
 # triagem-n1-agentes
 
-Estrutura inicial de um sistema multiagente para o Tema 1 do Hackathon UNIFEI
-2026. Este repositório contém apenas a base do projeto; o processamento da
-triagem e a integração operacional com os agentes ainda não foram implementados.
+Sistema multiagente de triagem N1 para o Tema 1 do Hackathon UNIFEI 2026. O fluxo
+usa Triador, Revisor, políticas determinísticas, Executor MCP e fila local para
+aprovação humana.
 
 ## Requisitos
 
@@ -30,6 +30,7 @@ Não armazene chaves ou credenciais no repositório.
 | `TRIAGEM_MCP_URL` | URL do servidor MCP Streamable HTTP | `http://localhost:8765/mcp` |
 | `TRIAGEM_BANCO_CAMINHO` | Caminho do arquivo SQLite local | `data/triagem.db` |
 | `TRIAGEM_NIVEL_LOG` | Nível mínimo dos logs | `INFO` |
+| `TRIAGEM_APROVADOR` | E-mail interno que recebe eventos escalados | não configurado |
 | `AI_API_KEY` | Chave do gateway de IA | obrigatório para usar a IA |
 | `AI_BASE_URL` | Endereço compatível com a API OpenAI | obrigatório para usar a IA |
 | `AI_MODEL` | Modelo liberado pela organização | obrigatório para usar a IA |
@@ -92,7 +93,10 @@ classificar-emails
 
 O comando consulta a base `eventos` e classifica os registros com status `novo`;
 não usa `proximo_evento` nem `ler_evento`, e não responde nem altera registros.
-A decisão é impressa em JSON, sem o corpo do e-mail.
+A decisão é impressa em JSON, sem o corpo do e-mail. Mensagens com sinais de
+credenciais, phishing ou dados pessoais sensíveis são encaminhadas para revisão
+humana local e não são enviadas ao modelo. Nos demais casos, e-mails, telefones,
+CPFs e o nome do remetente são pseudonimizados antes da análise.
 
 As chamadas a ferramentas MCP e a agentes são registradas como logs JSON na
 saída padrão. Os registros identificam o agente (`triador`, `revisor` ou
@@ -139,7 +143,7 @@ Para executar a demonstração fictícia:
 A demonstração não chama `proximo_evento` e não executa ferramentas de escrita
 do MCP. O nó Executor devolve apenas `EXECUCAO_SIMULADA`.
 
-## Processar um evento real sem escrita operacional
+## Processar um evento real
 
 Com o servidor MCP ativo, execute:
 
@@ -147,10 +151,39 @@ Com o servidor MCP ativo, execute:
 .venv/bin/python -m triagem_n1_agentes.fluxo_mcp
 ```
 
-O comando busca um único evento, consulta contexto como `triador`, executa o
-LangGraph e registra as conversas de `triador`, `revisor` e, quando aprovado,
-`executor`. O Executor continua simulado: não responde ao evento nem cria ou
-altera chamados e incidentes.
+O comando busca um evento, consulta contexto, executa o LangGraph e registra as
+conversas entre agentes. Se o Revisor aprovar sem exigir aprovação humana, o
+Executor pode responder ao evento ou registrar chamado/incidente pelo MCP. Use
+isso somente com um servidor MCP de desenvolvimento e dados de demonstração.
+
+Quando houver escalação, o evento e as decisões dos agentes ficam salvos na fila
+SQLite local como `PENDENTE`. O ID, a criticidade e a ação proposta são registrados
+na conversa MCP. Se
+`TRIAGEM_APROVADOR` estiver configurado com um e-mail `@t4h.exemplo`, o sistema
+também tenta enviar uma notificação pelo MCP. Sem esse endereço, a tarefa fica
+na fila local, mas não há notificação externa.
+
+Veja as pendências:
+
+```bash
+.venv/bin/python -m triagem_n1_agentes.aprovacoes_humanas listar
+```
+
+Registre a decisão humana e, se aprovada, continue para o Executor:
+
+```bash
+.venv/bin/python -m triagem_n1_agentes.aprovacoes_humanas decidir \
+  --evento-id EVENTO-123 \
+  --decisao aprovar \
+  --aprovador "Nome do responsável" \
+  --motivo "Justificativa da aprovação"
+```
+
+Para rejeitar, troque `aprovar` por `rejeitar`. O campo `--aprovador` fica no
+registro de auditoria; a autenticação da pessoa ainda depende do controle de
+acesso ao terminal que executa o comando. Uma aprovação humana não libera uma
+ação que o Revisor tenha rejeitado ou deixado sem ação confirmada. O estado da
+tarefa impede uma segunda decisão ou execução após uma tentativa iniciada.
 
 ## Modelo de decisão de triagem
 

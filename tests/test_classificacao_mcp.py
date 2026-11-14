@@ -149,6 +149,25 @@ def test_sanitiza_identificadores_pessoais_antes_da_ia() -> None:
 
     assert preparado["dominio_remetente"] == "t4h.exemplo"
     assert preparado["assunto"] == "Ajuda [NOME]"
-    assert "[EMAIL]" in preparado["corpo"]
-    assert "[CPF]" in preparado["corpo"]
+    assert preparado["corpo"] == "[CONTEUDO SENSIVEL REMOVIDO]"
     assert "Marina Alves" not in str(preparado)
+    assert (
+        classificacao_mcp._sanitizar_valor(
+            "Fale comigo em marina.alves@t4h.exemplo."
+        )
+        == "Fale comigo em [EMAIL]."
+    )
+
+
+def test_email_de_senha_expirando_e_encaminhado_localmente() -> None:
+    evento = {
+        "id": "PED-008",
+        "assunto": "Sua senha expira hoje",
+        "corpo": "Atualize sua senha.",
+    }
+
+    assert classificacao_mcp._contem_dado_sensivel(evento)
+    assert (
+        classificacao_mcp._decisao_revisao_humana(evento).acao_proposta.value
+        == "escalar_incidente"
+    )

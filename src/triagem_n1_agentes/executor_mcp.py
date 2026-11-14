@@ -3,7 +3,13 @@
 from typing import Any
 
 from triagem_n1_agentes.cliente_mcp import ClienteMCP
-from triagem_n1_agentes.modelos import AcaoProposta, DecisaoTriagem, RevisaoTriagem
+from triagem_n1_agentes.modelos import (
+    AcaoProposta,
+    Criticidade,
+    DecisaoTriagem,
+    NivelRiscoSeguranca,
+    RevisaoTriagem,
+)
 
 
 class ErroExecucaoSegura(Exception):
@@ -16,9 +22,27 @@ async def executar_aprovado(
     contexto: dict[str, Any],
     decisao: DecisaoTriagem,
     revisao: RevisaoTriagem,
+    aprovacao_humana: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if not revisao.aprovado or revisao.exige_humano:
-        raise ErroExecucaoSegura("A revisão não autorizou execução automática.")
+    humano_aprovou = bool(
+        aprovacao_humana
+        and aprovacao_humana.get("aprovado") is True
+        and aprovacao_humana.get("evento_id") == str(evento.get("id", ""))
+        and aprovacao_humana.get("decidido_por")
+        and aprovacao_humana.get("motivo")
+    )
+    exige_humano = (
+        revisao.exige_humano
+        or decisao.dado_sensivel_presente
+        or decisao.risco_seguranca
+        in {NivelRiscoSeguranca.ALTO, NivelRiscoSeguranca.CRITICO}
+        or decisao.criticidade in {Criticidade.P0, Criticidade.P1}
+        or decisao.necessita_aprovacao
+    )
+    if not revisao.aprovado or (exige_humano and not humano_aprovou):
+        raise ErroExecucaoSegura(
+            "Falta aprovação do Revisor ou a intervenção humana exigida."
+        )
     evento_id = str(evento["id"])
     motivo = f"Executar ação aprovada pelo Revisor para {evento_id}"
     acao = revisao.acao_confirmada
