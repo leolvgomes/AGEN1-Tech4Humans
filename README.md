@@ -1,255 +1,158 @@
-# triagem-n1-agentes
+# Triagem N1 — time de agentes (Hackathon UNIFEI 2026, Tema 1)
 
-Sistema multiagente de triagem N1 para o Tema 1 do Hackathon UNIFEI 2026. O fluxo
-usa Triador, Revisor, políticas determinísticas, Executor MCP e fila local para
-aprovação humana.
+Sete agentes de IA e uma pessoa fazem o primeiro atendimento dos e-mails internos da T4H: entendem o pedido,
+respondem com o FAQ, juntam duplicados, pedem o que falta, abrem chamado ou incidente com a criticidade certa,
+lançam férias pela tela do sistema antigo e chamam uma pessoa quando o caso não é deles. Segue o fluxo do
+`triagem-n1-agentes.bpmn` (uma raia por agente) e a especificação `especificacao-agentes-triagem-n1.docx`.
 
-## Requisitos
+## Rodar com um comando
 
-- Python 3.12
-- Um servidor MCP Streamable HTTP acessível em `http://localhost:8765/mcp`
+1. Suba o servidor MCP do kit (na pasta `Servidor MCP (Compartilhado)`):
+   `python mundo.py --tema triagem` (ou `TEMA=triagem docker compose up --build mundo`).
+2. Preencha a IA no arquivo `.env` (já criado a partir de `.env.example`, fora do Git):
+   ```
+   LLM_API_KEY=sua-chave
+   LLM_MODEL=nome-do-modelo
+   LLM_BASE_URL=            # vazio para OpenAI; URL do gateway do evento, OpenRouter, Gemini, Ollama etc.
+   LLM_MODEL_REVISOR=       # opcional: outro modelo para o Revisor
+   ```
+   Qualquer API compatível com a da OpenAI serve (Chat Completions). Exemplos de `LLM_BASE_URL`:
+   Gemini `https://generativelanguage.googleapis.com/v1beta/openai/`, OpenRouter `https://openrouter.ai/api/v1`,
+   Ollama `http://localhost:11434/v1`, Anthropic `https://api.anthropic.com/v1/`. Se o gateway recusar
+   `response_format`, o cliente desliga o modo JSON sozinho (ou use `LLM_JSON_MODE=0`).
+3. Rode:
+   - Windows: `.\rodar.ps1`
+   - macOS/Linux: `./rodar.sh`
 
-## Preparação do ambiente
+   Na primeira vez o script cria o `.venv`, instala as dependências e o Chromium do Playwright.
+   `.\rodar.ps1 --verificar` testa a conexão com o servidor MCP e com a IA e sai.
 
-Crie e ative um ambiente virtual com Python 3.12:
+| O quê | Endereço |
+| --- | --- |
+| **Canal humano** (aprovações, escalações, painel de pendências, novo chamado) | http://127.0.0.1:8080 |
+| Painel do servidor (ao vivo, com as conversas entre agentes) | http://localhost:8765 |
+| Sistema de férias (só tela) | http://localhost:8765/legado |
 
-```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
-python -m playwright install chromium
+Enquanto os agentes rodam, ninguém mexe neles (Regra R5): a pessoa fala com o time só pelo canal humano.
+
+## Os 7 agentes (+ 1 pessoa)
+
+| # | Agente (`agente`) | Papel em uma frase | Implementação | Autonomia |
+| --- | --- | --- | --- | --- |
+| 1 | Despachante (`despachante`) | Dono do laço `proximo_evento`: trata falhas, guarda a memória, entrega e fecha os casos. | Código, sem IA | Faz sozinho (infraestrutura) |
+| 2 | Triador (`triador`) | Classifica: segurança, impacto P0–P4, dúvida/pedido, tipo do catálogo e campos. | IA + regras de segurança por código | Só propõe |
+| 3 | Pesquisador (`pesquisador`) | Acha duplicados, a resposta no FAQ e o time certo. | Busca por código + IA julga | Só propõe |
+| 4 | Revisor (`revisor`) | Classifica sozinho antes de ver a proposta e aplica o checklist. | IA independente + checklist por código | Aprova ou devolve |
+| 5 | Executor (`executor`) | Único que registra, atualiza e responde, sempre com `agente`, `motivo` e `evento_id`. | Código + IA para redigir | Faz após o Revisor; espera OK humano |
+| 6 | Operador de tela (`operador_tela`) | Lança férias no `/legado` pelo navegador (Playwright). | Navegador + IA lê o formulário | Só após Revisor e OK |
+| 7 | Escalador (`escalador`) | Ponte com pessoas: escalações, aprovações, plantonista, painel de pendências. | Código + IA para resumir | Só escala |
+
+**Quem propõe não executa.** Nenhuma proposta vira ação sem passar pelo Revisor; tipos que exigem aprovação só
+executam depois da decisão registrada por uma pessoa no canal humano. Os agentes conversam por mensagens
+estruturadas (envelope validado) e cada troca relevante aparece no painel do servidor com `registrar_conversa`.
+
+### Matriz de permissões (aplicada no código: chamada fora dela falha antes de chegar ao servidor)
+
+| Agente | consultar / listar_bases | registrar / atualizar | responder_evento / enviar_mensagem | Tela /legado | registrar_conversa |
+| --- | --- | --- | --- | --- | --- |
+| Despachante | Sim (+ proximo_evento, ler/listar_eventos) | Não | Não | Não | Sim |
+| Triador | Sim | Não | Não | Não | Sim |
+| Pesquisador | Sim | Não | Não | Não | Sim |
+| Revisor | Sim | Não | Não | Não | Sim |
+| Executor | Sim | Sim | Sim | Não | Sim |
+| Operador de tela | Não | Não | Não | Sim | Sim |
+| Escalador | Só times, mensagens, eventos | Não | Sim (escalações, recusas, cobranças) | Não | Sim |
+
+## Fluxo (BPMN)
+
+```
+proximo_evento -> Despachante (abre o caso ou retoma um caso aguardando)
+  -> Triador: segurança? --sim--> Escalador -> pessoa (nada é enviado ao solicitante)
+  -> Triador: impacto real (ignora "URGENTE") -> Pesquisador: duplicado? --sim--> proposta de vínculo
+  -> incidente P0/P1/P2 -> proposta abrir_incidente
+  -> dúvida -> Pesquisador: FAQ (texto literal) ou encaminhar ao time
+  -> pedido -> catálogo + campos; faltou campo -> Executor pede o que falta (aguardar_resposta)
+  -> Revisor (classificação independente + checklist) --devolve (até 2x; na 3ª escala)--> Triador
+  -> Executor: exige OK? -> Escalador -> pessoa no canal humano -> aprovado/recusado
+  -> férias -> Operador de tela (/legado) ; demais -> Executor no MCP
+  -> P0/P1 -> Escalador avisa o plantonista na hora
+  -> Despachante atualiza a memória curta e a longa e fecha o caso
 ```
 
-Copie `.env.example` para `.env` e ajuste as variáveis conforme necessário.
-Não armazene chaves ou credenciais no repositório.
+## Memória
 
-## Variáveis de ambiente
+- **Curta** (SQLite em `dados/triagem.db`): cada caso com estado, histórico, propostas, revisões, devoluções,
+  aprovação e escalação. Sobrevive a uma queda do processo: ao reiniciar, o time retoma os casos.
+- **Longa** (mesmo banco, tabela `licoes`): padrões gerais — urgências falsas, remetentes que repetem pedidos,
+  sinais de P0/P1, correções do Revisor, mapeamentos frequentes e padrões de aprovação. Uma lição só vale depois de
+  confirmada por mais de um caso (ou por uma correção do Revisor) e só as mais relevantes entram nos prompts. A tela
+  **Memória longa** do canal humano mostra cada lição e quantas vezes foi usada. Nunca guarda resposta por evento.
 
-| Variável | Descrição | Padrão |
-| --- | --- | --- |
-| `TRIAGEM_MCP_URL` | URL do servidor MCP Streamable HTTP | `http://localhost:8765/mcp` |
-| `TRIAGEM_LEGADO_URL` | Tela inicial do sistema legado | `http://localhost:8765/legado` |
-| `TRIAGEM_LEGADO_ORIGENS_PERMITIDAS` | Origens que o navegador pode acessar | `http://localhost:8765` |
-| `TRIAGEM_LEGADO_MODELO` | Modelo com suporte ao computer tool na Responses API | `gpt-6.1-sol` |
-| `TRIAGEM_LEGADO_HEADLESS` | Executa Chromium sem janela visível | `true` |
-| `TRIAGEM_LEGADO_PERFIL` | Perfil local do navegador e sessão autenticada | `data/legado-browser` |
-| `TRIAGEM_LEGADO_CAPTURAS` | Capturas da interface legada | `data/legado-capturas` |
-| `TRIAGEM_BANCO_CAMINHO` | Caminho do arquivo SQLite local | `data/triagem.db` |
-| `TRIAGEM_NIVEL_LOG` | Nível mínimo dos logs | `INFO` |
-| `TRIAGEM_APROVADOR` | E-mail interno que recebe eventos escalados | não configurado |
-| `AI_API_KEY` | Chave do gateway de IA | obrigatório para usar a IA |
-| `AI_BASE_URL` | Endereço compatível com a API OpenAI | obrigatório para usar a IA |
-| `AI_MODEL` | Modelo liberado pela organização | obrigatório para usar a IA |
+## Resiliência
 
-## Estrutura
+Um único cliente MCP resiliente (`src/mcp_client`): timeout de 20 s; 503 repete com backoff 2/4/8/16 s; 504 em
+consulta repete; 504 em ação **confere no servidor antes de repetir** (rotina `ja_foi_feito()` por tipo de ação);
+409 consulta e reavalia; 410 para tudo e emite o relatório; conexão perdida reconecta, recarrega as bases e, se o
+servidor reiniciou (relógio voltou), abre uma rodada nova sem misturar casos antigos. Idempotência por
+`evento_id` (um evento nunca vira dois casos) e por `evento_id + etapa` (uma ação nunca é feita duas vezes).
+Um evento que se perdeu (lido mas sem caso) é recuperado pela varredura periódica de `listar_eventos`.
 
-```text
-src/triagem_n1_agentes/
-├── banco.py       # Acesso inicial ao SQLite
-├── configuracao.py # Configuração tipada por ambiente
-├── conexao_mcp.py # Diagnóstico de conexão e listagem de ferramentas MCP
-├── logs.py        # Configuração de logs estruturados
-├── modelos.py     # Modelos tipados com Pydantic
-├── orquestrador.py # Máquina de estados persistente
-├── politicas.py   # Políticas de criticidade e segurança
-└── __init__.py
-tests/
-├── test_bases_mcp.py
-├── test_conexao_mcp.py
-├── test_decisao_triagem.py
-├── test_orquestrador.py
-├── test_politicas.py
-└── test_estrutura.py
-```
+## Canal humano
 
-## Teste de conexão MCP
-
-Com o ambiente virtual ativado e o servidor MCP em execução, rode:
-
-```bash
-testar-conexao-mcp
-```
-
-O comando inicializa uma sessão Streamable HTTP, lista e imprime os nomes das
-ferramentas disponíveis e fecha a sessão ao terminar. Ele não executa nenhuma
-ferramenta, incluindo `proximo_evento`. Se o servidor não responder, exibe uma
-mensagem de erro e termina com código de saída diferente de zero.
-
-## Descoberta de bases
-
-Para consultar as bases e regras disponíveis no início da execução, rode:
-
-```bash
-listar-bases-mcp
-```
-
-O comando chama somente `listar_bases`, com o agente `orquestrador`, valida a
-resposta com modelos Pydantic e imprime o nome, a chave, os campos e as
-permissões de registro e atualização de cada base. Ele não consulta nem processa
-eventos.
-
-## Classificação de e-mails
-
-Para classificar os e-mails novos usando o Triador e o contexto autorizado do
-MCP, execute:
-
-```bash
-classificar-emails
-```
-
-O comando consulta a base `eventos` e classifica os registros com status `novo`;
-não usa `proximo_evento` nem `ler_evento`, e não responde nem altera registros.
-A decisão é impressa em JSON, sem o corpo do e-mail. Mensagens com sinais de
-credenciais, phishing ou dados pessoais sensíveis são encaminhadas para revisão
-humana local e não são enviadas ao modelo. Nos demais casos, e-mails, telefones,
-CPFs e o nome do remetente são pseudonimizados antes da análise.
-
-As chamadas a ferramentas MCP e a agentes são registradas como logs JSON na
-saída padrão. Os registros identificam o agente (`triador`, `revisor` ou
-`executor`), o evento e o resultado, além da ferramenta MCP chamada. Não
-registram assunto, remetente ou corpo do e-mail. O nível de log é controlado
-por `TRIAGEM_NIVEL_LOG`.
-
-## Teste de conexão com a IA
-
-Depois de preencher o `.env`, execute:
-
-```bash
-testar-conexao-ia
-```
-
-O diagnóstico faz uma solicitação mínima e informa somente se a conexão foi
-confirmada. A chave e a resposta bruta não são exibidas.
-
-## Teste do Triador inteligente
-
-Para validar o prompt e a saída estruturada sem consumir eventos do servidor:
-
-```bash
-testar-triador-ia
-```
-
-O teste usa um evento fictício de VPN, carrega `prompts/TRIADOR.md`, consulta a
-IA e valida a resposta com o modelo Pydantic `DecisaoTriagem`.
-
-## Fluxo LangChain/LangGraph
-
-O primeiro grafo seguro executa:
-
-```text
-Triador → Revisor → políticas determinísticas → humano/executor simulado
-```
-
-Para executar a demonstração fictícia:
-
-```bash
-.venv/bin/python -m triagem_n1_agentes.grafo_langchain
-```
-
-A demonstração não chama `proximo_evento` e não executa ferramentas de escrita
-do MCP. O nó Executor devolve apenas `EXECUCAO_SIMULADA`.
-
-## Processar um evento real
-
-Com o servidor MCP ativo, execute:
-
-```bash
-.venv/bin/python -m triagem_n1_agentes.fluxo_mcp
-```
-
-O comando busca um evento, consulta contexto, executa o LangGraph e registra as
-conversas entre agentes. Se o Revisor aprovar sem exigir aprovação humana, o
-Executor pode responder ao evento ou registrar chamado/incidente pelo MCP. Use
-isso somente com um servidor MCP de desenvolvimento e dados de demonstração.
-
-Quando houver escalação, o evento e as decisões dos agentes ficam salvos na fila
-SQLite local como `PENDENTE`. O ID, a criticidade e a ação proposta são registrados
-na conversa MCP. Se
-`TRIAGEM_APROVADOR` estiver configurado com um e-mail `@t4h.exemplo`, o sistema
-também tenta enviar uma notificação pelo MCP. Sem esse endereço, a tarefa fica
-na fila local, mas não há notificação externa.
-
-Veja as pendências:
-
-```bash
-.venv/bin/python -m triagem_n1_agentes.aprovacoes_humanas listar
-```
-
-Registre a decisão humana e, se aprovada, continue para o Executor:
-
-```bash
-.venv/bin/python -m triagem_n1_agentes.aprovacoes_humanas decidir \
-  --evento-id EVENTO-123 \
-  --decisao aprovar \
-  --aprovador "Nome do responsável" \
-  --motivo "Justificativa da aprovação"
-```
-
-Para rejeitar, troque `aprovar` por `rejeitar`. O campo `--aprovador` fica no
-registro de auditoria; a autenticação da pessoa ainda depende do controle de
-acesso ao terminal que executa o comando. Uma aprovação humana não libera uma
-ação que o Revisor tenha rejeitado ou deixado sem ação confirmada. O estado da
-tarefa impede uma segunda decisão ou execução após uma tentativa iniciada.
-
-## Computer use no sistema legado
-
-Pedidos de férias usam `registrar_ferias_legado`; não são gravados pelas bases
-MCP. O Executor só inicia o navegador depois da aprovação humana registrada para
-o mesmo evento. A automação usa a Responses API e um Chromium isolado, com
-requisições limitadas por padrão a `localhost:8765`.
-
-Antes do primeiro pedido, crie o perfil e autentique-se manualmente:
-
-```bash
-.venv/bin/python -m triagem_n1_agentes.computer_use_legado
-```
-
-Configure `AI_API_KEY`, `AI_BASE_URL` e `TRIAGEM_LEGADO_MODELO` com acesso a um
-modelo que aceite o tool `computer` na Responses API. Se o legado usar um domínio
-de autenticação separado, inclua a origem exata em
-`TRIAGEM_LEGADO_ORIGENS_PERMITIDAS`. O perfil com a sessão e as capturas ficam
-em `data/`, que não é versionado.
-
-Para visualizar o Chromium durante uma execução, configure
-`TRIAGEM_LEGADO_HEADLESS=false`. O agente recebe somente os campos extraídos e
-aprovados; se faltar dado obrigatório ou não houver confirmação visual, ele
-interrompe e retorna o caminho da captura para análise. HTTP 404, 401/403 e outros
-erros HTTP param o fluxo antes de enviar qualquer ação; confira a URL ou refaça a
-autenticação antes de tentar novamente.
-
-## Modelo de decisão de triagem
-
-`DecisaoTriagem` em `modelos.py` representa a classificação e a ação proposta
-para um evento. Criticidade, categoria, risco de segurança e ação usam enums;
-a confiança é limitada ao intervalo de 0 a 1. O modelo descreve uma proposta,
-mas não executa nenhuma ação.
-
-As regras determinísticas em `politicas.py` recebem impacto, risco e presença de
-dado pessoal sensível em campos estruturados. A urgência no assunto não altera a
-criticidade; P0/P1 exigem incidente e escalação imediata, P2 exige incidente, e
-P3/P4 permitem chamado ou resposta. Risco de segurança ou dado pessoal sensível
-exige escalação humana. A função retorna apenas um resultado tipado e não executa
-as ações permitidas.
-
-## Máquina de estados do orquestrador
-
-`Orquestrador` em `orquestrador.py` valida e persiste as transições na tabela
-`historico_transicoes` do SQLite; o estado atual e a reivindicação de execução
-ficam em `eventos_orquestracao`. A transição inicial para `RECEBIDO` também é
-registrada. Somente eventos `APROVADO` podem começar a execução, por meio de
-`executar_uma_vez`.
-
-A reivindicação é gravada atomicamente antes de chamar a ação, impedindo uma
-segunda chamada para o mesmo ID mesmo após reinício. Uma falha `FalhaRecuperavel`
-é persistida como `ERRO_RECUPERAVEL`; `executar_lote` continua com os demais
-eventos. Uma falha anterior à execução pode retornar à análise; depois que a
-execução foi reivindicada, ela não é repetida, pois o resultado externo pode ser
-incerto.
+- **Painel**: o que espera uma pessoa, por categoria, com destaque para P0/P1 sem atendimento.
+- **Aprovações**: ação proposta e justificativa; Aprovar/Recusar com comentário; grava quem e quando. Lembretes
+  sobem a urgência; silêncio nunca vira aprovação.
+- **Escalações**: resumo de 3 linhas, o que o time já fez e a recomendação; Assumir / Resolvida.
+- **Histórico**, **Casos** (com a triagem e as revisões de cada um) e **Memória longa**.
+- **Novo chamado**: o pedido entra no servidor como evento e passa pelo mesmo time.
+- **Perguntar ao time**: "por que o CH-1001 foi P2?" — o Escalador responde com o histórico do caso.
+- **Demonstração T14**: botão que faz o Triador rebaixar o próximo P1 para P2, para mostrar o Revisor corrigindo.
 
 ## Testes
 
 ```bash
-pytest
+.venv/Scripts/python -m pytest -q tests/test_unidades.py      # unitários, sem servidor e sem chave
 ```
 
+Ponta a ponta (Seção 15.2), contra um servidor de teste e com um **LLM simulado só para testes**
+(`tests/llm_simulado.py`, heurísticas genéricas; o sistema real exige a chave):
+
+```bash
+# na pasta do servidor
+python mundo.py --tema triagem --sem-cenario --porta 8799 --erros 0.15 --segundos-por-dia 1200 --sem-navegador
+# nesta pasta
+.venv/Scripts/python -m tests.e2e_servidor     # T01–T15 (servidor limpo a cada execução)
+.venv/Scripts/python -m tests.e2e_reinicio     # derruba e sobe o servidor no meio da execução
+```
+
+Resultado aqui: 28/28 critérios do `e2e_servidor` com 15% de falhas ligadas (503/504/409 tratados, nenhum registro
+duplicado), reinício do servidor OK, e o cenário de treino inteiro (60 e-mails, relógio acelerado) sem exceções.
+Esses testes validam o encanamento; a qualidade das classificações depende do modelo configurado no `.env`.
+
+## Estrutura
+
+```
+src/
+  main.py            sobe o time e o canal humano (python rodar.py)
+  config.py          variáveis de ambiente (.env)
+  mcp_client/        cliente MCP resiliente + matriz de permissões
+  llm/               cliente da IA (API compatível com OpenAI), JSON validado com uma correção
+  contratos/         envelope e esquemas das mensagens (Pydantic), rotas permitidas entre agentes
+  barramento/        fila em memória, trava por caso, isolamento de falhas, espelho no painel
+  memoria/           SQLite: casos, eventos vistos, ações feitas, escalações, aprovações, lições
+  agentes/           despachante, triador, pesquisador, revisor, executor, operador_tela, escalador, prompts
+  canal_humano/      app web (Starlette) das pessoas
+tests/               unitários, e2e com o servidor, reinício, LLM simulado
+logs/                log JSONL por execução, relatórios finais e capturas da tela de férias (fora do Git)
+dados/               banco SQLite (fora do Git)
+```
+
+## Limitações conhecidas e o que faríamos com mais tempo
+
+- Duas mensagens iguais que chegam juntas enquanto a primeira ainda espera informação viram dois casos (só a
+  partir do registro no servidor o segundo é vinculado). Com mais tempo: deduplicar também casos em aberto.
+- Nenhum gestor responde pelo servidor: a pessoa no canal humano faz o papel de aprovador.
+- O resumo das escalações e a redação das mensagens dependem do modelo; o código troca por um texto pronto quando
+  a redação traz número que não está nos fatos ou fica longa demais.
+- Docker para os agentes não foi incluído (o script cria o ambiente virtual); a tela usa Playwright headless
+  (`OPERADOR_HEADLESS=0` mostra o navegador, bom para a apresentação).
