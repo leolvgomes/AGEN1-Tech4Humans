@@ -52,6 +52,22 @@ Regra geral: na dúvida, o lado seguro (escalar, classificar para cima, não rep
 10. **Mensagem nova juntada a um caso** (por exemplo um "Fwd:" do mesmo pedido enquanto ele espera informação)
     recebe um retorno próprio, para que nenhum e-mail fique sem ação.
 
+11. **Objeção do Revisor só vale com prova.** Na execução de 14/11 com `gpt-4o-mini` (60 casos) o Revisor fez 155
+    devoluções e 4 aprovações, e 51 casos foram escalados por revisão esgotada: o modelo repetia os problemas de
+    exemplo do prompt. Agora o checklist objetivo é só código, a IA responde a uma pergunta por ação e uma objeção só
+    devolve a proposta se a prova confere (trecho literal do e-mail, tipo/time que existe nas bases, campo com valor
+    sem apoio no e-mail). Objeção sem prova fica no histórico do caso como `objecao_sem_prova`. Troca assumida: uma
+    objeção correta, mas sem prova, é ignorada. Segurança e criticidade não dependem dessa prova.
+12. **Falha de uma pessoa não vira P1/P2.** Só rebaixa quando o próprio modelo diz que afeta uma pessoa (ou ninguém) e
+    o texto não tem sinal coletivo ("clientes", "todos", "fora do ar"...). P0 nunca é rebaixado.
+13. **P2 já em andamento num chamado aberto** pode ser vinculado a ele; P0/P1 nunca.
+14. **Lição de correção só quando deu certo** (devolvida e depois aprovada diferente), por categoria fixa. Antes, o
+    texto do modelo virava lição na hora, realimentava o erro e chegou a guardar o nome de uma pessoa.
+15. **O Pesquisador não repropõe** o item de FAQ ou o registro que o Revisor já recusou no mesmo caso.
+
+Os itens 11 a 15 foram validados com testes de regressão (`tests/test_revisor.py`) e com a IA simulada; ainda não
+rodaram com um modelo real.
+
 ## Regras do hackathon
 
 - R2: nenhum prompt, regra ou memória contém resposta por evento. As heurísticas por palavra-chave existem apenas em
